@@ -164,3 +164,95 @@ def test_markdown_report_and_invalid_inputs() -> None:
     assert "Historical VaR (95% / 99%)" in md
     assert "Expected Shortfall (95%)" in md
     assert DISCLAIMER in md
+
+
+def test_sec_fundamentals_offline_fixture_and_scoring() -> None:
+    from sec_fundamentals import compute_sec_fundamentals, format_fundamentals_markdown
+
+    fixture_path = Path(__file__).resolve().parent / "sample_sec_facts.json"
+    raw = json.loads(fixture_path.read_text(encoding="utf-8"))
+    fm = compute_sec_fundamentals(raw, max_drawdown_pct=10.0)
+    assert fm.entity_name.startswith("Sample Corp")
+    assert fm.revenue_cagr_pct == pytest.approx(12.0, abs=0.05)
+    assert fm.operating_margin_pct == pytest.approx(25.0, abs=0.05)
+    assert fm.free_cash_flow_proxy == pytest.approx(275_000_000.0, abs=1.0)
+    assert fm.debt_to_cash_ratio == pytest.approx(0.5, abs=0.001)
+    assert 70.0 <= fm.combined_resilience_score <= 100.0
+    md = format_fundamentals_markdown(fm, max_drawdown_pct=10.0)
+    assert "Combined Resilience Score" in md
+    assert "not certified financial advice" in fm.disclaimer.lower()
+
+
+def test_sec_fundamentals_skips_non_finite_and_keeps_latest_filing() -> None:
+    from sec_fundamentals import compute_sec_fundamentals
+
+    facts = {
+        "entityName": "Hygiene Test Co",
+        "cik": 999999,
+        "facts": {
+            "us-gaap": {
+                "Revenues": {
+                    "units": {
+                        "USD": [
+                            {"fy": 2023, "fp": "FY", "form": "10-K", "filed": "2024-02-01", "val": 1000.0},
+                            {"fy": 2024, "fp": "FY", "form": "10-K", "filed": "2025-02-01", "val": 1100.0},
+                            {"fy": 2024, "fp": "FY", "form": "10-K/A", "filed": "2025-03-01", "val": 1200.0},
+                            {"fy": 2025, "fp": "FY", "form": "10-K", "filed": "2026-02-01", "val": float("nan")},
+                        ]
+                    }
+                },
+                "OperatingIncomeLoss": {
+                    "units": {"USD": [{"fy": 2024, "fp": "FY", "form": "10-K", "filed": "2025-02-01", "val": 240.0}]}
+                },
+                "CashAndCashEquivalentsAtCarryingValue": {
+                    "units": {"USD": [{"fy": 2024, "fp": "FY", "form": "10-K", "filed": "2025-02-01", "val": 0.0}]}
+                },
+            }
+        },
+    }
+    fm = compute_sec_fundamentals(facts, max_drawdown_pct=20.0)
+    assert fm.fiscal_years == [2023, 2024]
+    assert fm.latest_revenue == 1200.0
+    assert fm.operating_margin_pct == pytest.approx(20.0, abs=0.05)
+    assert fm.debt_to_cash_ratio is None
+
+
+def test_sec_fundamentals_resolves_ticker_via_mocked_edgar(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sec_fundamentals
+
+    def fake_get(url: str, user_agent: str = "", retries: int = 3, timeout: int = 20):
+        assert "KaledBouchagraoui" in user_agent
+        if "company_tickers.json" in url:
+            return {"0": {"cik_str": 123456, "ticker": "ACME", "title": "Acme Robotics"}}
+        assert "CIK0000123456.json" in url
+        fixture = Path(__file__).resolve().parent / "sample_sec_facts.json"
+        return json.loads(fixture.read_text(encoding="utf-8"))
+
+    monkeypatch.setattr(sec_fundamentals, "_sec_get_json", fake_get)
+    facts = sec_fundamentals.load_or_fetch_company_facts("ACME")
+    fm = sec_fundamentals.compute_sec_fundamentals(facts, max_drawdown_pct=5.0)
+    assert fm.combined_resilience_score > 75.0
+
+
+def test_cli_fundamentals_with_price_series() -> None:
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "quant_portfolio_analyzer.py",
+            "--input",
+            "sample_prices.csv",
+            "--fundamentals",
+            "sample_sec_facts.json",
+            "--periods-per-year",
+            "12",
+            "--format",
+            "json",
+        ],
+        cwd=str(Path(__file__).resolve().parent),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    payload = json.loads(proc.stdout)
+    assert "metrics" in payload and "fundamentals" in payload
+    assert payload["fundamentals"]["combined_resilience_score"] > 0

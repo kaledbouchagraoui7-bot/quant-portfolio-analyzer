@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 class PortfolioReporter:
@@ -7,7 +7,7 @@ class PortfolioReporter:
     def export_to_json(data: Dict[str, Any], filepath: str) -> bool:
         try:
             report = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "metrics": data,
                 "status": "success"
             }

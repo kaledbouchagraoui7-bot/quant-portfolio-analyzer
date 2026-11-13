@@ -1,0 +1,52 @@
+{
+  "cik": 320193,
+  "entityName": "Sample Corp (SEC EDGAR XBRL Demo Fixture)",
+  "facts": {
+    "us-gaap": {
+      "RevenueFromContractWithCustomerExcludingAssessedTax": {
+        "units": {
+          "USD": [
+            {"fy": 2023, "fp": "FY", "form": "10-K", "filed": "2023-11-03", "val": 1000000000},
+            {"fy": 2024, "fp": "FY", "form": "10-K", "filed": "2024-11-01", "val": 1120000000},
+            {"fy": 2025, "fp": "FY", "form": "10-K", "filed": "2025-11-02", "val": 1254400000}
+          ]
+        }
+      },
+      "OperatingIncomeLoss": {
+        "units": {
+          "USD": [
+            {"fy": 2025, "fp": "FY", "form": "10-K", "filed": "2025-11-02", "val": 313600000}
+          ]
+        }
+      },
+      "NetCashProvidedByUsedInOperatingActivities": {
+        "units": {
+          "USD": [
+            {"fy": 2025, "fp": "FY", "form": "10-K", "filed": "2025-11-02", "val": 340000000}
+          ]
+        }
+      },
+      "PaymentsToAcquirePropertyPlantAndEquipment": {
+        "units": {
+          "USD": [
+            {"fy": 2025, "fp": "FY", "form": "10-K", "filed": "2025-11-02", "val": 65000000}
+          ]
+        }
+      },
+      "LongTermDebt": {
+        "units": {
+          "USD": [
+            {"fy": 2025, "fp": "FY", "form": "10-K", "filed": "2025-11-02", "val": 150000000}
+          ]
+        }
+      },
+      "CashAndCashEquivalentsAtCarryingValue": {
+        "units": {
+          "USD": [
+            {"fy": 2025, "fp": "FY", "form": "10-K", "filed": "2025-11-02", "val": 300000000}
+          ]
+        }
+      }
+    }
+  }
+}

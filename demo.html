@@ -17,13 +17,62 @@
 <body>
   <h1>Quantitative Portfolio Risk, VaR/CVaR, DCA &amp; Risk-Parity Calculator</h1>
   <div class="notice"><strong>Informational Analytics Only:</strong> Outputs are deterministic educational/research math calculations on public or user-supplied CSV/JSON series — not certified financial advice, investment recommendations, or live brokerage execution. Runs 100% locally in your browser.</div>
+  <div style="margin-bottom:1rem; display:flex; gap:0.5rem;">
+    <button onclick="showTab('quant')">1. Risk, VaR/CVaR, DCA &amp; Weights</button>
+    <button onclick="showTab('sec')" style="background:#334155;">2. SEC EDGAR Fundamentals</button>
+  </div>
+  <div id="tab-quant">
   <div class="card">
     <label for="series"><strong>Paste Single or Multi-Asset Price CSV (<code>date,SPY,TLT</code> or <code>date,close</code>):</strong></label>
     <textarea id="series">date,SPY,TLT&#10;2026-01,100,100&#10;2026-02,104,101&#10;2026-03,99,102&#10;2026-04,107,102.5&#10;2026-05,112,103&#10;2026-06,105,104&#10;2026-07,118,104.5</textarea>
     <p>Periods / yr: <input id="ppy" type="number" value="12" style="width:65px" /> &nbsp; Risk-free: <input id="rf" type="number" step="0.01" value="0.03" style="width:65px" /> &nbsp; DCA Budget: <input id="budget" type="number" value="12000" style="width:85px" /> &nbsp; <button onclick="runAll()">Run Analysis</button></p>
   </div>
   <div class="card" id="out"></div>
+  </div>
+  <div id="tab-sec" style="display:none;">
+    <div class="card">
+      <p><strong>SEC EDGAR XBRL Fundamental Health Scorer (Offline / Paste JSON)</strong></p>
+      <p>Revenue Y1: <input id="rev1" type="number" value="1000000000" /> &nbsp; Revenue Latest: <input id="rev2" type="number" value="1254400000" /> &nbsp; Years: <input id="yrs" type="number" value="2" style="width:55px" /></p>
+      <p>Operating Income: <input id="opinc" type="number" value="313600000" /> &nbsp; OCF: <input id="ocf" type="number" value="340000000" /> &nbsp; CapEx: <input id="capex" type="number" value="65000000" /></p>
+      <p>Long-Term Debt: <input id="debt" type="number" value="150000000" /> &nbsp; Cash: <input id="cash" type="number" value="300000000" /> &nbsp; Drawdown %: <input id="ddsec" type="number" value="10" style="width:60px" /> &nbsp; <button onclick="runSec()">Compute Resilience Score</button></p>
+    </div>
+    <div class="card" id="out-sec"></div>
+  </div>
   <script>
+    function showTab(name) {
+      document.getElementById('tab-quant').style.display = name === 'quant' ? 'block' : 'none';
+      document.getElementById('tab-sec').style.display = name === 'sec' ? 'block' : 'none';
+    }
+    function runSec() {
+      const r1 = Math.max(1, parseFloat(document.getElementById('rev1').value) || 1);
+      const r2 = Math.max(1, parseFloat(document.getElementById('rev2').value) || 1);
+      const yrs = Math.max(1, parseFloat(document.getElementById('yrs').value) || 1);
+      const op = parseFloat(document.getElementById('opinc').value) || 0;
+      const ocf = parseFloat(document.getElementById('ocf').value) || 0;
+      const capex = Math.abs(parseFloat(document.getElementById('capex').value) || 0);
+      const debt = parseFloat(document.getElementById('debt').value) || 0;
+      const cash = parseFloat(document.getElementById('cash').value) || 0;
+      const dd = Math.max(0, Math.min(100, parseFloat(document.getElementById('ddsec').value) || 0));
+      const cagr = (Math.pow(r2 / r1, 1 / yrs) - 1) * 100;
+      const margin = (op / r2) * 100;
+      const fcf = ocf - capex;
+      const d2c = cash > 0 ? debt / cash : null;
+      const fScore = Math.max(0, Math.min(25, ((cagr + 10) / 35) * 25))
+        + Math.max(0, Math.min(25, (margin / 30) * 25))
+        + (fcf > 0 ? Math.max(0, Math.min(25, ((fcf / r2 * 100) / 20) * 25)) : 0)
+        + (d2c === null ? (debt > 0 ? 0 : 15) : Math.max(0, Math.min(25, ((4 - Math.min(4, d2c)) / 4) * 25)));
+      const ddRes = Math.max(0, 100 - dd * 1.5);
+      const comb = 0.65 * fScore + 0.35 * ddRes;
+      document.getElementById('out-sec').innerHTML = `<table>
+        <tr><th>Metric</th><th>Value</th></tr>
+        <tr><td>Revenue CAGR</td><td>${cagr.toFixed(2)}%</td></tr>
+        <tr><td>Operating Margin</td><td>${margin.toFixed(2)}%</td></tr>
+        <tr><td>Free Cash Flow Proxy</td><td>$${fcf.toLocaleString()}</td></tr>
+        <tr><td>Debt-to-Cash Ratio</td><td>${d2c === null ? 'N/A' : d2c.toFixed(3) + 'x'}</td></tr>
+        <tr><td>Fundamental / Combined Resilience Score</td><td>${fScore.toFixed(1)} / 100 → <strong>${comb.toFixed(1)} / 100</strong></td></tr>
+      </table>`;
+    }
+    runSec();
     function quantile(sorted, q) {
       if (sorted.length === 1) return sorted[0];
       const pos = q * (sorted.length - 1);

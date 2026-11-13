@@ -529,8 +529,9 @@ def format_markdown_report(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Quantitative Portfolio Risk, VaR, DCA & Risk-Parity CLI (Informational Only)")
-    parser.add_argument("--input", type=str, required=True, help="Path to CSV or JSON price series (single or multi-asset).")
+    parser = argparse.ArgumentParser(description="Quantitative Portfolio Risk, VaR, DCA, Risk-Parity & SEC Fundamentals CLI (Informational Only)")
+    parser.add_argument("--input", type=str, default="", help="Path to CSV or JSON price series (single or multi-asset).")
+    parser.add_argument("--fundamentals", type=str, default="", help="SEC ticker/CIK or local SEC companyfacts JSON path.")
     parser.add_argument("--periods-per-year", type=int, default=252, help="Periods per year (252 trading days, 52 weeks, 12 months).")
     parser.add_argument("--risk-free", type=float, default=0.03, help="Annual risk-free rate decimal (default: 0.03).")
     parser.add_argument("--budget", type=float, default=12000.0, help="Initial budget for Lump-Sum vs DCA simulation (default: 12000).")
@@ -539,27 +540,60 @@ def main() -> None:
     parser.add_argument("--format", choices=("md", "json"), default="md", help="Output format.")
     args = parser.parse_args()
 
-    src = Path(args.input)
-    labels, prices = load_price_series(src)
-    metrics = analyze_price_series(
-        prices=prices,
-        labels=labels,
-        periods_per_year=args.periods_per_year,
-        risk_free_rate=args.risk_free,
-    )
-    dca = compare_lump_sum_vs_dca(prices, budget=args.budget, installments=min(args.installments, len(prices)), labels=labels)
+    if not args.input and not args.fundamentals:
+        parser.error("Provide at least one of --input or --fundamentals.")
+
+    metrics = None
+    dca = None
     multi = None
-    if args.multi_asset:
-        _, assets_map = load_multi_asset_prices(src)
-        multi = compute_inverse_volatility_weights(assets_map, periods_per_year=args.periods_per_year, risk_free_rate=args.risk_free)
+    src_name = "sec_fundamentals"
+
+    if args.input:
+        src = Path(args.input)
+        src_name = src.name
+        labels, prices = load_price_series(src)
+        metrics = analyze_price_series(
+            prices=prices,
+            labels=labels,
+            periods_per_year=args.periods_per_year,
+            risk_free_rate=args.risk_free,
+        )
+        dca = compare_lump_sum_vs_dca(prices, budget=args.budget, installments=min(args.installments, len(prices)), labels=labels)
+        if args.multi_asset:
+            _, assets_map = load_multi_asset_prices(src)
+            multi = compute_inverse_volatility_weights(assets_map, periods_per_year=args.periods_per_year, risk_free_rate=args.risk_free)
+
+    fundamentals = None
+    if args.fundamentals:
+        from sec_fundamentals import (
+            compute_sec_fundamentals,
+            format_fundamentals_markdown,
+            load_or_fetch_company_facts,
+        )
+
+        raw_facts = load_or_fetch_company_facts(args.fundamentals)
+        dd_val = metrics.max_drawdown_pct if metrics is not None else 0.0
+        fundamentals = compute_sec_fundamentals(raw_facts, max_drawdown_pct=dd_val)
 
     if args.format == "json":
-        payload: dict[str, Any] = {"metrics": asdict(metrics), "dca_vs_lump_sum": dca}
+        payload: dict[str, Any] = {}
+        if metrics is not None:
+            payload["metrics"] = asdict(metrics)
+            payload["dca_vs_lump_sum"] = dca
         if multi is not None:
             payload["multi_asset_risk_parity"] = multi
+        if fundamentals is not None:
+            payload["fundamentals"] = asdict(fundamentals)
         print(json.dumps(payload, indent=2))
     else:
-        print(format_markdown_report(metrics, source_name=src.name, dca_summary=dca, multi_asset_summary=multi))
+        chunks: list[str] = []
+        if metrics is not None:
+            chunks.append(format_markdown_report(metrics, source_name=src_name, dca_summary=dca, multi_asset_summary=multi))
+        if fundamentals is not None:
+            from sec_fundamentals import format_fundamentals_markdown
+
+            chunks.append(format_fundamentals_markdown(fundamentals, max_drawdown_pct=metrics.max_drawdown_pct if metrics else 0.0))
+        print("\n".join(chunks))
 
 
 if __name__ == "__main__":
