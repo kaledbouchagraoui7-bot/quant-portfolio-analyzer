@@ -3,7 +3,7 @@
 Quantitative Portfolio Risk, Compounding & Backtest Metrics Analyzer (`quant_portfolio_analyzer.py`)
 
 Adapted locally inside `obsidian-second-brain` using clean open-source quantitative finance
-algorithms inspired by `mbk-dev/okama` (MIT).
+algorithms inspired by `bshaw2019/Crypto_Trader` (MIT).
 Zero live brokerage credentials, zero trading execution — pure mathematical analytics.
 
 Informational Quantitative & Mathematical Analytics Only: Outputs are deterministic educational/research math calculations on public or user-supplied CSV/JSON series — not certified financial advice, investment recommendations, or live brokerage execution.
