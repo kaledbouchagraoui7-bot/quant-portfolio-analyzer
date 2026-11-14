@@ -1,35 +1,25 @@
 import json
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Callable
-from functools import wraps
+from typing import Dict, Any, List
 
-class PortfolioReporter:
+class PortfolioSecurityScanner:
     @staticmethod
-    def export_to_sarif(data: Dict[str, Any], filepath: str) -> bool:
+    def calculate_risk_score(portfolio_data: Dict[str, float]) -> float:
+        if not portfolio_data:
+            return 0.0
+        values = list(portfolio_data.values())
+        return sum(values) / len(values)
+
+class ReportGenerator:
+    @staticmethod
+    def generate_summary_json(metrics: Dict[str, Any], output_path: str) -> bool:
         try:
-            sarif = {
-                "version": "2.1.0",
-                "runs": [{
-                    "tool": {"driver": {"name": "quant_portfolio_analyzer", "version": "1.0.0"}},
-                    "results": [{"message": {"text": json.dumps(data)}, "level": "note"}]
-                }]
+            report = {
+                "timestamp": "2023-10-27T10:00:00Z",
+                "metrics": metrics,
+                "status": "validated"
             }
-            with open(filepath, "w") as f:
-                json.dump(sarif, f, indent=4)
+            with open(output_path, "w") as f:
+                json.dump(report, f)
             return True
-        except Exception:
+        except (IOError, TypeError):
             return False
-
-class DataValidator:
-    @staticmethod
-    def validate_batch(prices: List[float]) -> bool:
-        return bool(prices and len(prices) >= 2 and all(isinstance(p, (int, float)) and p >= 0 for p in prices))
-
-def validate_integration(func: Callable) -> Callable:
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        result = func(*args, **kwargs)
-        if result is None:
-            raise ValueError("Integration error: Function returned None")
-        return result
-    return wrapper

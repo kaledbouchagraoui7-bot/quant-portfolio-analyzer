@@ -1,26 +1,22 @@
 import pytest
-from evolution_extensions import PortfolioReporter, DataValidator, validate_integration
 import os
+from evolution_extensions import PortfolioSecurityScanner, ReportGenerator
 
-def test_sarif_export():
-    data = {"sharpe": 1.5}
-    path = "test.sarif"
-    assert PortfolioReporter.export_to_sarif(data, path) is True
-    assert os.path.exists(path)
-    os.remove(path)
+def test_risk_score_calculation():
+    data = {"AAPL": 150.0, "GOOG": 2800.0}
+    score = PortfolioSecurityScanner.calculate_risk_score(data)
+    assert score == 1475.0
 
-def test_batch_validation():
-    assert DataValidator.validate_batch([10.0, 11.0]) is True
-    assert DataValidator.validate_batch([10.0]) is False
-    assert DataValidator.validate_batch([-1.0, 2.0]) is False
+def test_risk_score_empty():
+    assert PortfolioSecurityScanner.calculate_risk_score({}) == 0.0
 
-def test_validation_decorator():
-    @validate_integration
-    def mock_func(): return True
-    assert mock_func() is True
+def test_report_generation_success(tmp_path):
+    d = tmp_path / "report.json"
+    success = ReportGenerator.generate_summary_json({"volatility": 0.05}, str(d))
+    assert success is True
+    assert d.exists()
 
-def test_validation_decorator_failure():
-    @validate_integration
-    def fail_func(): return None
-    with pytest.raises(ValueError):
-        fail_func()
+def test_report_generation_failure():
+    # Invalid path to trigger IOError
+    success = ReportGenerator.generate_summary_json({}, "/root/forbidden.json")
+    assert success is False
