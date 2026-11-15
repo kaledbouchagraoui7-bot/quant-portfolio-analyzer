@@ -1,5 +1,7 @@
 # `quant-portfolio-analyzer`
 
+[![CI](https://github.com/kaledbouchagraoui7-bot/quant-portfolio-analyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/kaledbouchagraoui7-bot/quant-portfolio-analyzer/actions/workflows/ci.yml)
+
 > **Informational Quantitative & Mathematical Analytics Only:** Outputs are deterministic educational/research math calculations on public or user-supplied CSV/JSON series — not certified financial advice, investment recommendations, or live brokerage execution.
 
 Deterministic Python CLI and zero-install browser calculator (`demo.html` / [GitHub Pages](https://kaledbouchagraoui7-bot.github.io/quant-portfolio-analyzer/)) for portfolio risk, tail loss, compounding, and risk-parity allocation analytics, adapted cleanly from open-source Track A patterns (`shashankvemuri/Finance` [MIT], `skfolio/skfolio` [BSD-3-Clause]).
