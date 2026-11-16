@@ -11,6 +11,20 @@ Deterministic Python CLI and zero-install browser calculator (`demo.html` / [Git
 - **Tail Risk:** Historical & Parametric Value-at-Risk (`VaR_95`, `VaR_99`) plus Historical Expected Shortfall (`CVaR_95`).
 - **Compounding Simulator:** Lump-Sum vs. spaced Dollar-Cost Averaging (DCA) portfolio comparison.
 - **Multi-Asset Allocation:** Inverse-Volatility / Risk-Parity basket weighting across multiple CSV/JSON price columns.
+- **7-Bot Risk-Governed Research Architecture (`src/multi_bot_engine/`):** Strict separation of duties across `orchestrator_bot`, `market_research_bot`, `analysis_bot`, `strategy_bot`, `risk_management_bot` (HMAC-signed veto gatekeeper), `execution_bot` (`LIVE_BROKER_ENABLED = False`, paper-only), and `monitoring_bot` (`6%` throttle / `12%` kill switch).
+
+```mermaid
+flowchart LR
+  B2["Bot 2: Market Research"] --> B3["Bot 3: Fundamental & Trend Analysis"]
+  B3 --> B4["Bot 4: Multi-Strategy Proposals"]
+  B4 --> B5["Bot 5: Risk Management Veto Gate (HMAC Signed)"]
+  B5 --> B6["Bot 6: Paper-Only Execution (LIVE_BROKER=False)"]
+  B6 --> B7["Bot 7: Telemetry & Kill-Switch Guardian"]
+  B1["Bot 1: Orchestrator"] --> B2
+  B7 --> B1
+```
+
+> **Open-Source Quantitative Research & Risk-Analytics Software — Not Investment Advice (AMF / MiFID II Compliant).** `AGE_18_MONETIZATION_GATE = True` · `PAPER_TRADING_ONLY = True` · `MAX_LEVERAGE = 1.0`.
 
 ## Quick Start
 ```bash
