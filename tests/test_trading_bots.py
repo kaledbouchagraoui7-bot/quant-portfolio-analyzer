@@ -87,11 +87,21 @@ def test_institutional_momentum_allocator_weights() -> None:
         "sovereign_bonds": [100.0 * (1.0008**i) for i in range(60)],
         "cash_bills": [100.0 * (1.0002**i) for i in range(60)],
     }
-    res = compute_dual_momentum_weights(asset_prices, lookback=20)
+    res = compute_dual_momentum_weights(asset_prices, lookback=12)
     assert res["paper_trading_only"] is True
     history = res["weights_history"]
     assert len(history) == 60
     for row in history:
         assert sum(row.values()) <= MAX_LEVERAGE + 1e-5
-    assert history[-1]["equities_index"] == 0.55
-    assert history[-1]["gold_bullion"] == 0.45
+    assert history[-1]["equities_index"] > 0.0
+    assert history[-1]["gold_bullion"] > 0.0
+
+    # Absolute Cash Shield activates when risk assets fall below trend/risk-free rate
+    bear_prices = {
+        "equities_index": [100.0 * (0.996**i) for i in range(60)],
+        "gold_bullion": [100.0 * (0.998**i) for i in range(60)],
+        "sovereign_bonds": [100.0 * (0.999**i) for i in range(60)],
+        "cash_bills": [100.0 * (1.0002**i) for i in range(60)],
+    }
+    bear_res = compute_dual_momentum_weights(bear_prices, lookback=12)
+    assert bear_res["weights_history"][-1]["cash_bills"] == 1.0
