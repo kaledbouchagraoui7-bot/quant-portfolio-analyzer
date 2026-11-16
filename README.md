@@ -17,3 +17,9 @@ Deterministic Python CLI and zero-install browser calculator (`demo.html` / [Git
 python quant_portfolio_analyzer.py --input sample_prices.csv --periods-per-year 12 --format md
 pytest -v
 ```
+
+<!-- VAULT_GRAPH_WEAVER_START -->
+## Related Vault Nodes
+- **Cluster:** *Software Ventures & Python Suites*
+- **Connected Hubs:** [[Home]] | [[ID_CARD]] | [[MOC_Projects]] | [[GitHub_Alpha_Radar]]
+<!-- VAULT_GRAPH_WEAVER_END -->

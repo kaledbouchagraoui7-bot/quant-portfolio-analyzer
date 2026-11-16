@@ -15,3 +15,9 @@ Thank you for your interest in contributing!
 
 - Keep all functions focused, deterministic, and covered by unit tests.
 - Never commit API keys, credentials, or patient/protected health information (PHI).
+
+<!-- VAULT_GRAPH_WEAVER_START -->
+## Related Vault Nodes
+- **Cluster:** *Software Ventures & Python Suites*
+- **Connected Hubs:** [[Home]] | [[ID_CARD]] | [[MOC_Projects]] | [[GitHub_Alpha_Radar]]
+<!-- VAULT_GRAPH_WEAVER_END -->
