@@ -68,7 +68,9 @@ def validate_and_approve_orders(
         return {"approved_orders": approved, "vetoed_orders": vetoed, "nav_eur": nav}
 
     crypto_used = 0.0
+    correlated_risky_used = 0.0
     total_used = 0.0
+    max_correlated_risky_weight = 0.70
     kelly_cap = fractional_kelly_fraction(win_rate=0.56, payoff_ratio=1.6, fraction=0.25, max_cap=0.25)
 
     for prop in proposals:
@@ -96,6 +98,14 @@ def validate_and_approve_orders(
             crypto_used += allowed_w
         elif ac == "stock":
             allowed_w = min(allowed_w, max_single_stock_weight)
+
+        if ac in ("stock", "crypto"):
+            rem_corr = max(0.0, max_correlated_risky_weight - correlated_risky_used)
+            if rem_corr <= 1e-6:
+                vetoed.append({**prop, "veto_reason": "cross_asset_correlation_cap_veto"})
+                continue
+            allowed_w = min(allowed_w, rem_corr)
+            correlated_risky_used += allowed_w
 
         if total_used + allowed_w > MAX_LEVERAGE:
             allowed_w = max(0.0, MAX_LEVERAGE - total_used)
