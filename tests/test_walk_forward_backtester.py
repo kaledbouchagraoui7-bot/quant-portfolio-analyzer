@@ -13,6 +13,7 @@ from src.walk_forward_backtester import (
 )
 from src.wealth_allocation_models import (
     compare_allocation_models,
+    compute_covariance_matrix,
     equal_weight_allocation,
     fractional_kelly_portfolio_allocation,
     hierarchical_risk_parity_allocation,
@@ -79,3 +80,19 @@ def test_wealth_allocation_models_comparison() -> None:
     for model_data in comp.values():
         assert model_data["metrics"]["sample_size_n"] == 120
         assert "cagr" in model_data["metrics"]
+
+
+def test_hrp_uses_full_off_diagonal_covariance() -> None:
+    base_wave = [0.01 * math.sin(i / 2.0) for i in range(60)]
+    low_vol = [0.004 * math.cos(i / 3.0) for i in range(60)]
+    # Case 1: A & B move together (positive covariance -> higher joint cluster variance)
+    pos_cov = {"A": base_wave, "B": list(base_wave), "C": low_vol}
+    # Case 2: A & B hedge each other (negative covariance -> lower joint cluster variance)
+    neg_cov = {"A": base_wave, "B": [-x for x in base_wave], "C": low_vol}
+    cov_pos = compute_covariance_matrix(pos_cov)
+    cov_neg = compute_covariance_matrix(neg_cov)
+    assert cov_pos["A"]["B"] > 0.0 and cov_neg["A"]["B"] < 0.0
+    w_pos = hierarchical_risk_parity_allocation(pos_cov)
+    w_neg = hierarchical_risk_parity_allocation(neg_cov)
+    # When A & B hedge each other, their combined HRP allocation must differ materially (>1%)
+    assert (w_neg["A"] + w_neg["B"]) > (w_pos["A"] + w_pos["B"]) + 0.05

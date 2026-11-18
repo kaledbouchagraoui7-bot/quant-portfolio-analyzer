@@ -10,15 +10,50 @@ excess-over-cash Sharpe, Deflated Sharpe Ratio, block bootstrap, sensitivity gri
 
 from __future__ import annotations
 
+import json
 import math
 import random
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from src.risk_execution_engine import apply_slippage_and_commission
 from src.trading_bots.institutional_momentum_allocator import compute_dual_momentum_weights
 from src.walk_forward_backtester import compute_audited_metrics
+
+_DEFAULT_TRIALS_PATH = Path(__file__).resolve().parent.parent / ".runtime" / "experiment_trials.json"
+
+
+class ExperimentTrialRegistry:
+    """Tracks every tested strategy & parameter combination so DSR reflects true multiple testing."""
+
+    def __init__(self, path: Path | None = None) -> None:
+        self.path = (path or _DEFAULT_TRIALS_PATH).resolve()
+
+    def load(self) -> dict[str, Any]:
+        if self.path.exists():
+            try:
+                data = json.loads(self.path.read_text(encoding="utf-8"))
+                if isinstance(data, dict) and isinstance(data.get("trials"), list):
+                    return data
+            except Exception:
+                pass
+        return {"trials": []}
+
+    def record_trials(self, entries: list[dict[str, Any]]) -> int:
+        data = self.load()
+        existing_sigs = {e.get("signature") for e in data["trials"] if isinstance(e, dict)}
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        for ent in entries:
+            sig = ent.get("signature")
+            if sig and sig not in existing_sigs:
+                existing_sigs.add(sig)
+                data["trials"].append({**ent, "recorded_utc": now})
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        return len(data["trials"])
 
 
 class StrategyLifecycleState(str, Enum):
@@ -169,12 +204,12 @@ def audit_momentum_allocator_claims(
 
     raw_metrics = compute_audited_metrics(base_rets)
     excess_metrics = compute_audited_metrics(excess_rets)
-    dsr = deflated_sharpe_ratio(raw_metrics["sharpe_ratio"], raw_metrics["sample_size_n"], n_trials=n_trials)
     bootstrap_ci = block_bootstrap_sharpe_ci(base_rets)
     tiers = simulate_execution_scenarios(wh, ret_map, start_bar=start_bar)
 
     # Parameter sensitivity (±20% around defaults)
     sensitivity: list[dict[str, Any]] = []
+    trial_entries: list[dict[str, Any]] = [{"signature": "institutional_momentum_allocator:base:60:0.025", "strategy": "institutional_momentum_allocator"}]
     for lb in (48, 60, 72):
         for vol_cap in (0.020, 0.025, 0.030):
             s_wh = compute_dual_momentum_weights(price_map, lookback=lb, target_annual_vol=vol_cap)["weights_history"]
@@ -189,10 +224,16 @@ def audit_momentum_allocator_claims(
             ]
             m = compute_audited_metrics(s_rets)
             sensitivity.append({"lookback": lb, "vol_cap": vol_cap, "cagr": m["cagr"], "sharpe": m["sharpe_ratio"], "max_dd": m["max_drawdown"]})
+            trial_entries.append({"signature": f"institutional_momentum_allocator:lb={lb}:vol={vol_cap}", "sharpe": m["sharpe_ratio"]})
+
+    effective_trials = max(n_trials, len(trial_entries))
+    dsr = deflated_sharpe_ratio(raw_metrics["sharpe_ratio"], raw_metrics["sample_size_n"], n_trials=effective_trials)
 
     return {
+        "dataset_category": "SYNTHETIC_SIMULATION",
         "raw_metrics": raw_metrics,
         "excess_over_cash_metrics": excess_metrics,
+        "effective_trials_tested": effective_trials,
         "deflated_sharpe_prob": dsr,
         "bootstrap_95_ci": bootstrap_ci,
         "execution_scenarios": tiers,

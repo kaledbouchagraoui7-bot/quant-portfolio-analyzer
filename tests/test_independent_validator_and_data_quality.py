@@ -7,12 +7,20 @@ import math
 import pytest
 
 from src.independent_validator import (
+    ExperimentTrialRegistry,
     StrategyLifecycleState,
     audit_momentum_allocator_claims,
     evaluate_tiered_kill_switch,
     transition_strategy_lifecycle,
 )
-from src.market_data_pipeline import register_dataset, validate_price_series
+from src.market_data_pipeline import (
+    fetch_free_historical_daily_ohlcv,
+    prevent_category_mixing,
+    register_dataset,
+    validate_ohlcv_bars,
+    validate_price_series,
+)
+from src.wealth_allocation_models import hierarchical_risk_parity_allocation
 
 
 def test_market_data_validation_and_checksum_registry() -> None:
@@ -72,3 +80,52 @@ def test_lifecycle_transitions_and_tiered_kill_switch() -> None:
     assert k_sticky.halted is True
     k_reset = evaluate_tiered_kill_switch(0.01, was_halted_previously=True, human_reset_token="HUMAN_CONFIRMED_RESET")
     assert k_reset.halted is False and k_reset.tier == "NORMAL"
+
+
+def test_dataset_categories_ohlcv_validation_and_hrp_stability(tmp_path) -> None:
+    ds_syn = register_dataset(
+        "syn_series",
+        {"VWCE_ETF": [100.0, 100.2, 100.4, 100.3, 100.8]},
+        category="SYNTHETIC_SIMULATION",
+        environment="1_synthetic_deterministic",
+    )
+    ds_real = register_dataset(
+        "real_series",
+        {"VWCE_ETF": [100.0, 100.1, 100.3, 100.5, 100.7]},
+        category="HISTORICAL_REAL_MARKET_DATA",
+        environment="2_historical_backtest",
+    )
+    with pytest.raises(ValueError):
+        prevent_category_mixing([ds_syn, ds_real])
+
+    bad_ohlcv = validate_ohlcv_bars(
+        ["2026-01-01", "2026-01-01", "2026-01-03", "2026-01-02", "2026-01-05"],
+        [100.0, 101.0, 102.0, 101.5, 103.0],
+    )
+    assert bad_ohlcv["valid"] is False
+    assert any("duplicate_timestamp" in e for e in bad_ohlcv["errors"])
+
+    # Offline CSV fallback tags USER_SUPPLIED_DATA instead of inventing real-market claim
+    csv_p = tmp_path / "sample.csv"
+    csv_p.write_text(
+        "date,close\n2026-01-01,100\n2026-01-02,101\n2026-01-03,102\n2026-01-04,101.5\n2026-01-05,103\n",
+        encoding="utf-8",
+    )
+    hist = fetch_free_historical_daily_ohlcv("SAMPLE", stooq_symbol="invalid.offline.symbol", timeout=1, sample_csv_path=csv_p)
+    assert hist["validation"]["valid"] is True
+    assert hist["survivorship_bias_free"] is False
+    assert len(hist["checksum_sha256"]) == 64
+
+    # Experiment trial registry + singular covariance HRP numerical stability
+    reg = ExperimentTrialRegistry(tmp_path / "trials.json")
+    cnt = reg.record_trials([{"signature": "s1:a"}, {"signature": "s2:b"}, {"signature": "s1:a"}])
+    assert cnt == 2
+
+    singular = {
+        "ASSET_A": [0.01 * math.sin(i) for i in range(25)],
+        "ASSET_A_DUP": [0.01 * math.sin(i) for i in range(25)],
+        "FLAT": [0.0 for _ in range(25)],
+    }
+    w = hierarchical_risk_parity_allocation(singular)
+    assert math.isclose(sum(w.values()), 1.0, abs_tol=1e-4)
+    assert all(math.isfinite(val) and val >= 0.0 for val in w.values())

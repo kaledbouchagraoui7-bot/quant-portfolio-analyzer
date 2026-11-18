@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import secrets
+import time
 import pytest
 
 from src.multi_bot_engine.execution_bot import execute_paper_orders
@@ -16,6 +18,8 @@ from src.multi_bot_engine.shared_infrastructure import (
     ZERO_REAL_MONEY_RISK,
     PaperPortfolioLedger,
     build_synthetic_multi_asset_prices,
+    get_risk_gate_secret,
+    sign_approval_token,
 )
 
 
@@ -84,3 +88,131 @@ def test_monitoring_bot_triggers_kill_switch_on_drawdown_or_anomaly() -> None:
     )
     assert len(risk_out["approved_orders"]) == 0
     assert len(risk_out["vetoed_orders"]) == 1
+
+
+def test_hmac_anti_replay_expiration_and_tamper_resistance(tmp_path, monkeypatch) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from dataclasses import replace
+
+    monkeypatch.setenv("QPA_NONCE_DB_PATH", str(tmp_path / "nonces.sqlite3"))
+    monkeypatch.setenv("QPA_RISK_GATE_SECRET", "TEST_PERSISTENT_32BYTE_KEY_ABCDEF123456")
+
+    ledger = PaperPortfolioLedger(initial_capital_eur=10000.0, cash_eur=10000.0, peak_nav_eur=10000.0)
+    prices = {"VWCE_ETF": 100.0, "ROG_STOCK": 100.0}
+    risk_out = validate_and_approve_orders(
+        [{"symbol": "VWCE_ETF", "asset_class": "etf", "proposed_weight": 0.15, "leverage": 1.0, "annual_vol": 0.12}],
+        prices,
+        ledger,
+    )
+    order = risk_out["approved_orders"][0]
+    assert order.nonce and order.expires_at_epoch > time.time() and order.quantity > 0.0
+
+    # Altered notional, altered quantity, altered asset all fail HMAC verification
+    for forged in (
+        replace(order, notional_eur=order.notional_eur + 500.0),
+        replace(order, quantity=order.quantity + 10.0),
+        replace(order, symbol="ROG_STOCK"),
+    ):
+        with pytest.raises(PermissionError):
+            execute_paper_orders([forged], prices, ledger)
+
+    # Expired token rejected even with valid HMAC signature
+    exp_ts = round(time.time() - 10.0, 3)
+    exp_nonce = secrets.token_hex(12)
+    exp_tok = sign_approval_token(
+        get_risk_gate_secret(), "VWCE_ETF", "etf", 0.10, 1000.0, nonce=exp_nonce, expires_at_epoch=exp_ts
+    )
+    expired = ApprovedOrder(
+        symbol="VWCE_ETF",
+        asset_class="etf",
+        target_weight=0.10,
+        notional_eur=1000.0,
+        approval_token=exp_tok,
+        sub_strategy="test_exp",
+        nonce=exp_nonce,
+        expires_at_epoch=exp_ts,
+    )
+    with pytest.raises(PermissionError):
+        execute_paper_orders([expired], prices, ledger)
+
+    # Valid order executes once; same-process replay & cross-restart SQLite replay raise PermissionError
+    res_first = execute_paper_orders([order], prices, ledger)
+    assert len(res_first["executed_orders"]) == 1
+    with pytest.raises(PermissionError):
+        execute_paper_orders([order], prices, ledger)
+
+    # Simulated process restart against same SQLite nonce DB file
+    from src.multi_bot_engine.execution_bot import verify_risk_approval
+
+    with pytest.raises(PermissionError):
+        verify_risk_approval(order, consume=True, nonce_db_path=tmp_path / "nonces.sqlite3")
+
+    # Concurrent multi-thread redemption: only 1 of 8 racing threads can consume a fresh approval
+    fresh_order = validate_and_approve_orders(
+        [{"symbol": "VWCE_ETF", "asset_class": "etf", "proposed_weight": 0.12, "leverage": 1.0, "annual_vol": 0.12}],
+        prices,
+        PaperPortfolioLedger(initial_capital_eur=10000.0, cash_eur=10000.0, peak_nav_eur=10000.0),
+    )["approved_orders"][0]
+
+    def _try_consume(_idx: int) -> bool:
+        try:
+            verify_risk_approval(fresh_order, consume=True, nonce_db_path=tmp_path / "nonces.sqlite3")
+            return True
+        except PermissionError:
+            return False
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        outcomes = list(pool.map(_try_consume, range(8)))
+    assert sum(1 for ok in outcomes if ok) == 1
+
+    # Missing signing key & keystore unavailable fail closed
+    fresh2 = validate_and_approve_orders(
+        [{"symbol": "VWCE_ETF", "asset_class": "etf", "proposed_weight": 0.12, "leverage": 1.0, "annual_vol": 0.12}],
+        prices,
+        PaperPortfolioLedger(initial_capital_eur=10000.0, cash_eur=10000.0, peak_nav_eur=10000.0),
+    )["approved_orders"][0]
+    monkeypatch.setenv("QPA_RISK_GATE_SECRET", "__MISSING__")
+    with pytest.raises(PermissionError):
+        verify_risk_approval(fresh2, consume=True, nonce_db_path=tmp_path / "nonces.sqlite3")
+
+    monkeypatch.delenv("QPA_RISK_GATE_SECRET", raising=False)
+    monkeypatch.setenv("QPA_FORCE_KEYSTORE_UNAVAILABLE", "1")
+    with pytest.raises(RuntimeError):
+        get_risk_gate_secret(allow_ephemeral_test_fallback=False)
+    monkeypatch.delenv("QPA_FORCE_KEYSTORE_UNAVAILABLE", raising=False)
+
+    # Corrupted SQLite nonce DB fails closed
+    monkeypatch.setenv("QPA_RISK_GATE_SECRET", "TEST_PERSISTENT_32BYTE_KEY_ABCDEF123456")
+    corrupt_db = tmp_path / "corrupt_nonces.sqlite3"
+    corrupt_db.write_bytes(b"THIS_IS_NOT_SQLITE_HEADER_DATA")
+    fresh3 = validate_and_approve_orders(
+        [{"symbol": "VWCE_ETF", "asset_class": "etf", "proposed_weight": 0.12, "leverage": 1.0, "annual_vol": 0.12}],
+        prices,
+        PaperPortfolioLedger(initial_capital_eur=10000.0, cash_eur=10000.0, peak_nav_eur=10000.0),
+    )["approved_orders"][0]
+    with pytest.raises(PermissionError):
+        verify_risk_approval(fresh3, consume=True, nonce_db_path=corrupt_db)
+
+
+def test_monitoring_bot_measures_sharpe_or_reports_unknown() -> None:
+    short_ledger = PaperPortfolioLedger(initial_capital_eur=10000.0, cash_eur=10000.0, peak_nav_eur=10000.0)
+    short_ledger.nav_history.extend([10000.0, 10010.0])
+    h_short = monitor_portfolio_health(short_ledger, {"VWCE_ETF": 100.0})
+    assert h_short["live_paper_sharpe"] == "UNKNOWN"
+    assert h_short["sharpe_status"] == "UNKNOWN_INSUFFICIENT_HISTORY"
+    assert h_short["sufficiently_supported"] is False
+
+    prelim_ledger = PaperPortfolioLedger(initial_capital_eur=10000.0, cash_eur=10000.0, peak_nav_eur=10000.0)
+    prelim_ledger.nav_history.extend([10000.0, 10025.0, 10040.0, 10075.0, 10095.0, 10130.0])
+    h_prelim = monitor_portfolio_health(prelim_ledger, {"VWCE_ETF": 100.0})
+    assert h_prelim["sharpe_status"] == "PRELIMINARY_LOW_SAMPLE_WARNING"
+    assert h_prelim["sufficiently_supported"] is False
+
+    long_ledger = PaperPortfolioLedger(initial_capital_eur=10000.0, cash_eur=10000.0, peak_nav_eur=10000.0)
+    long_ledger.nav_history.extend([10000.0 + (i * 15.0) + ((i % 3) * 4.0) for i in range(32)])
+    h_long = monitor_portfolio_health(long_ledger, {"VWCE_ETF": 100.0}, backtest_sharpe=1.5)
+    assert h_long["sharpe_status"] == "MEASURED"
+    assert h_long["sufficiently_supported"] is True
+    assert h_long["sample_size_n"] == 32
+    assert isinstance(h_long["live_paper_sharpe"], float)
+    assert isinstance(h_long["sharpe_drift"], float)

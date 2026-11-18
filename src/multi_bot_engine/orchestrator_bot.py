@@ -52,6 +52,7 @@ def run_seven_bot_cycle(
     risk_out = validate_and_approve_orders(proposals, snapshot["latest_prices"], active_ledger)
     # Bot 6: Simulated Paper-Only Order Execution
     exec_out = execute_paper_orders(risk_out["approved_orders"], snapshot["latest_prices"], active_ledger)
+    active_ledger.record_nav(snapshot["latest_prices"])
     # Bot 7: Telemetry & Kill-Switch Guardian
     health = monitor_portfolio_health(active_ledger, snapshot["latest_prices"])
 

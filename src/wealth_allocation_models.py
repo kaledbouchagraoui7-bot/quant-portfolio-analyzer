@@ -61,19 +61,79 @@ def mean_variance_sharpe_allocation(
     return {a: round(v / total, 6) for a, v in scores.items()}
 
 
+def compute_covariance_matrix(
+    return_matrix: dict[str, list[float]],
+    ridge: float = 1e-8,
+) -> dict[str, dict[str, float]]:
+    """Compute full sample covariance matrix Σ_ij across aligned return series."""
+    assets = sorted(return_matrix.keys())
+    means: dict[str, float] = {}
+    for a in assets:
+        rets = return_matrix[a]
+        means[a] = (sum(rets) / len(rets)) if rets else 0.0
+
+    cov: dict[str, dict[str, float]] = {a: {} for a in assets}
+    for i, a in enumerate(assets):
+        for j in range(i, len(assets)):
+            b = assets[j]
+            ra = return_matrix[a]
+            rb = return_matrix[b]
+            t_len = min(len(ra), len(rb))
+            if t_len <= 1:
+                c_val = 0.01 if a == b else 0.0
+            else:
+                ma = means[a]
+                mb = means[b]
+                c_val = sum((ra[t] - ma) * (rb[t] - mb) for t in range(t_len)) / max(t_len - 1, 1)
+            if a == b:
+                c_val = max(c_val, 1e-8) + ridge
+            cov[a][b] = c_val
+            cov[b][a] = c_val
+    return cov
+
+
+def _correl_ordered_assets(assets: list[str], cov: dict[str, dict[str, float]]) -> list[str]:
+    """Order assets via nearest-neighbor correlation distance d_ij = sqrt(0.5 * (1 - rho_ij))."""
+    if len(assets) <= 2:
+        return list(assets)
+
+    def _corr_dist(a: str, b: str) -> float:
+        denom = math.sqrt(max(cov[a][a], 1e-12) * max(cov[b][b], 1e-12))
+        rho = max(-1.0, min(1.0, cov[a][b] / denom)) if denom > 0 else 0.0
+        return math.sqrt(max(0.0, 0.5 * (1.0 - rho)))
+
+    # Start from the asset with lowest total variance so ordering is deterministic
+    remaining = sorted(assets, key=lambda x: cov[x][x])
+    ordered = [remaining.pop(0)]
+    while remaining:
+        cur = ordered[-1]
+        nxt = min(remaining, key=lambda x: (_corr_dist(cur, x), cov[x][x], x))
+        remaining.remove(nxt)
+        ordered.append(nxt)
+    return ordered
+
+
 def hierarchical_risk_parity_allocation(return_matrix: dict[str, list[float]]) -> dict[str, float]:
     """
-    Hierarchical Risk Parity (López de Prado recursive bisection by volatility-ordered clusters).
+    Hierarchical Risk Parity (López de Prado recursive bisection using the full
+    sample covariance matrix Σ_ij, correlation-distance seriation, and w^T Σ w cluster variance).
     """
-    _, stds = _asset_stats(return_matrix)
-    ordered = [a for a, _ in sorted(stds.items(), key=lambda kv: kv[1])]
+    assets = sorted(return_matrix.keys())
+    if not assets:
+        return {}
+    cov = compute_covariance_matrix(return_matrix)
+    ordered = _correl_ordered_assets(assets, cov)
     weights = {a: 1.0 for a in ordered}
 
     def _cluster_var(cluster: list[str]) -> float:
-        inv_v = [1.0 / (stds[a] ** 2) for a in cluster]
+        inv_v = [1.0 / max(cov[a][a], 1e-12) for a in cluster]
         s = sum(inv_v) or 1.0
         w_c = [v / s for v in inv_v]
-        return sum((w_c[i] ** 2) * (stds[cluster[i]] ** 2) for i in range(len(cluster)))
+        quad = 0.0
+        for i, ai in enumerate(cluster):
+            for j, aj in enumerate(cluster):
+                quad += w_c[i] * w_c[j] * cov[ai][aj]
+        return max(quad, 1e-12)
 
     clusters = [ordered]
     while any(len(c) > 1 for c in clusters):

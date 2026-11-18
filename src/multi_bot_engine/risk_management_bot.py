@@ -12,6 +12,8 @@ Not Investment Advice (AMF / MiFID II Compliant).
 
 from __future__ import annotations
 
+import secrets
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -20,6 +22,7 @@ from src.multi_bot_engine.shared_infrastructure import (
     PAPER_TRADING_ONLY,
     ZERO_REAL_MONEY_RISK,
     PaperPortfolioLedger,
+    get_risk_gate_secret,
     sign_approval_token,
 )
 from src.risk_execution_engine import (
@@ -28,8 +31,6 @@ from src.risk_execution_engine import (
     check_drawdown_circuit_breaker,
     fractional_kelly_fraction,
 )
-
-_RISK_GATE_SECRET = "ALCOA_PLUS_PAPER_RISK_GATE_V1"
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,17 @@ class ApprovedOrder:
     notional_eur: float
     approval_token: str
     sub_strategy: str
+    nonce: str = ""
+    expires_at_epoch: float = 0.0
+    direction: str = "BUY"
+    quantity: float = 0.0
+    max_slippage_bps: float = 15.0
+    issuing_component: str = "risk_management_bot"
+    authorized_executor: str = "execution_bot"
+    strategy_version: str = "v2.1"
+    risk_policy_version: str = "ALCOA-Paper-v2.1"
+    portfolio_version: str = "v1"
+    issued_at_epoch: float = 0.0
 
 
 def validate_and_approve_orders(
@@ -117,7 +129,32 @@ def validate_and_approve_orders(
 
         total_used += allowed_w
         notional_eur = round(nav * allowed_w, 4)
-        token = sign_approval_token(_RISK_GATE_SECRET, sym, allowed_w, notional_eur)
+        px = float(latest_prices.get(sym, 0.0))
+        cur_qty = float(ledger.positions.get(sym, 0.0))
+        target_qty = round(notional_eur / px, 6) if px > 0.0 else 0.0
+        delta_qty = round(target_qty - cur_qty, 6)
+        direction = "SELL" if delta_qty < 0.0 else ("REBALANCE" if cur_qty > 0.0 else "BUY")
+        issued_ts = round(time.time(), 3)
+        nonce = secrets.token_hex(12)
+        expires_at_epoch = round(issued_ts + 300.0, 3)
+        token = sign_approval_token(
+            get_risk_gate_secret(),
+            sym,
+            ac,
+            allowed_w,
+            notional_eur,
+            nonce=nonce,
+            expires_at_epoch=expires_at_epoch,
+            direction=direction,
+            quantity=target_qty,
+            max_slippage_bps=15.0,
+            issuing_component="risk_management_bot",
+            authorized_executor="execution_bot",
+            strategy_version="v2.1",
+            risk_policy_version="ALCOA-Paper-v2.1",
+            portfolio_version="v1",
+            issued_at_epoch=issued_ts,
+        )
         approved.append(
             ApprovedOrder(
                 symbol=sym,
@@ -126,6 +163,17 @@ def validate_and_approve_orders(
                 notional_eur=notional_eur,
                 approval_token=token,
                 sub_strategy=prop.get("sub_strategy", "unknown"),
+                nonce=nonce,
+                expires_at_epoch=expires_at_epoch,
+                direction=direction,
+                quantity=target_qty,
+                max_slippage_bps=15.0,
+                issuing_component="risk_management_bot",
+                authorized_executor="execution_bot",
+                strategy_version="v2.1",
+                risk_policy_version="ALCOA-Paper-v2.1",
+                portfolio_version="v1",
+                issued_at_epoch=issued_ts,
             )
         )
 
