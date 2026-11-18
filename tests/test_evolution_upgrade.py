@@ -1,22 +1,21 @@
 import pytest
 import os
-from evolution_extensions import PortfolioSecurityScanner, ReportGenerator
+from evolution_extensions import PortfolioEvolutionScanner
 
-def test_risk_score_calculation():
-    data = {"AAPL": 150.0, "GOOG": 2800.0}
-    score = PortfolioSecurityScanner.calculate_risk_score(data)
-    assert score == 1475.0
+def test_grade_security_logic():
+    assert PortfolioEvolutionScanner.grade_security(0.9)["rating"] == "CRITICAL"
+    assert PortfolioEvolutionScanner.grade_security(0.2)["rating"] == "STABLE"
 
-def test_risk_score_empty():
-    assert PortfolioSecurityScanner.calculate_risk_score({}) == 0.0
+def test_batch_validation_success():
+    targets = [{"ticker": "AAPL", "weight": 0.5}, {"ticker": "MSFT", "weight": 0.5}]
+    assert all(PortfolioEvolutionScanner.batch_validate_targets(targets))
 
-def test_report_generation_success(tmp_path):
-    d = tmp_path / "report.json"
-    success = ReportGenerator.generate_summary_json({"volatility": 0.05}, str(d))
+def test_batch_validation_failure():
+    targets = [{"ticker": 123, "weight": "invalid"}]
+    assert not any(PortfolioEvolutionScanner.batch_validate_targets(targets))
+
+def test_sarif_export(tmp_path):
+    path = tmp_path / "report.sarif"
+    success = PortfolioEvolutionScanner.export_sarif_report({"risk": 0.1}, str(path))
     assert success is True
-    assert d.exists()
-
-def test_report_generation_failure():
-    # Invalid path to trigger IOError
-    success = ReportGenerator.generate_summary_json({}, "/root/forbidden.json")
-    assert success is False
+    assert os.path.exists(path)

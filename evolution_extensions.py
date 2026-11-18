@@ -1,25 +1,36 @@
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, TypedDict
+from datetime import datetime
 
-class PortfolioSecurityScanner:
-    @staticmethod
-    def calculate_risk_score(portfolio_data: Dict[str, float]) -> float:
-        if not portfolio_data:
-            return 0.0
-        values = list(portfolio_data.values())
-        return sum(values) / len(values)
+class SecurityGrade(TypedDict):
+    score: float
+    rating: str
 
-class ReportGenerator:
+class PortfolioEvolutionScanner:
     @staticmethod
-    def generate_summary_json(metrics: Dict[str, Any], output_path: str) -> bool:
+    def grade_security(risk_score: float) -> SecurityGrade:
+        if risk_score > 0.8: rating = "CRITICAL"
+        elif risk_score > 0.5: rating = "WARNING"
+        else: rating = "STABLE"
+        return {"score": risk_score, "rating": rating}
+
+    @staticmethod
+    def batch_validate_targets(targets: List[Dict[str, Any]]) -> List[bool]:
+        return [isinstance(t.get("ticker"), str) and isinstance(t.get("weight"), (int, float)) for t in targets]
+
+    @staticmethod
+    def export_sarif_report(metrics: Dict[str, Any], output_path: str) -> bool:
         try:
             report = {
-                "timestamp": "2023-10-27T10:00:00Z",
-                "metrics": metrics,
-                "status": "validated"
+                "version": "2.1.0",
+                "runs": [{
+                    "tool": {"driver": {"name": "QuantAnalyzer", "version": "1.0.0"}},
+                    "results": [{"message": {"text": "Portfolio validation complete"}, "properties": metrics}]
+                }],
+                "timestamp": datetime.now().isoformat()
             }
             with open(output_path, "w") as f:
                 json.dump(report, f)
             return True
-        except (IOError, TypeError):
+        except Exception:
             return False
