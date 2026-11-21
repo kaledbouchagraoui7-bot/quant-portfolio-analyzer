@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import math
 import random
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from src.risk_execution_engine import (
     MAX_LEVERAGE,

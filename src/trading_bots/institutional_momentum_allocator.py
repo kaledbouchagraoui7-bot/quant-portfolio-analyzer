@@ -13,7 +13,11 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from src.risk_execution_engine import MAX_LEVERAGE, PAPER_TRADING_ONLY, ZERO_REAL_MONEY_RISK
+from src.risk_execution_engine import (
+    MAX_LEVERAGE,
+    PAPER_TRADING_ONLY,
+    ZERO_REAL_MONEY_RISK,
+)
 
 
 def _annualized_vol(series: list[float], end_idx: int, window: int = 20) -> float:

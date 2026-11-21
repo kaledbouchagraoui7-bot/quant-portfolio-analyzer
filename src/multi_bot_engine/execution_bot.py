@@ -9,6 +9,7 @@ Not Investment Advice (AMF / MiFID II Compliant).
 
 from __future__ import annotations
 
+import contextlib
 import hmac
 import os
 import sqlite3
@@ -83,16 +84,12 @@ class PersistentNonceRegistry:
                 )
                 conn.execute("COMMIT")
             except sqlite3.IntegrityError as exc:
-                try:
+                with contextlib.suppress(sqlite3.Error):
                     conn.execute("ROLLBACK")
-                except Exception:
-                    pass
                 raise PermissionError(f"ExecutionBot rejected replayed/concurrent approval nonce for {symbol}.") from exc
             except sqlite3.DatabaseError as exc:
-                try:
+                with contextlib.suppress(sqlite3.Error):
                     conn.execute("ROLLBACK")
-                except Exception:
-                    pass
                 raise PermissionError(f"Fail-closed: nonce DB transaction failed: {exc}") from exc
             finally:
                 conn.close()

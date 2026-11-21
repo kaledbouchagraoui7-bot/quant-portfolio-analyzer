@@ -20,12 +20,12 @@ import math
 import os
 import secrets
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 try:
     import keyring  # type: ignore[import-not-found]
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     keyring = None
 
 _RUNTIME_HMAC_SECRET: str = ""
@@ -54,7 +54,7 @@ DEFAULT_UNIVERSE: dict[str, dict[str, Any]] = {
 
 
 def now_utc_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 @dataclass
@@ -137,9 +137,8 @@ def get_risk_gate_secret(allow_ephemeral_test_fallback: bool = False) -> str:
     """
     global _RUNTIME_HMAC_SECRET
 
-    if os.environ.get("QPA_FORCE_KEYSTORE_UNAVAILABLE", "").strip() == "1":
-        if not allow_ephemeral_test_fallback:
-            raise RuntimeError("Fail-closed: persistent OS-backed signing key unavailable.")
+    if os.environ.get("QPA_FORCE_KEYSTORE_UNAVAILABLE", "").strip() == "1" and not allow_ephemeral_test_fallback:
+        raise RuntimeError("Fail-closed: persistent OS-backed signing key unavailable.")
 
     env_secret = os.environ.get("QPA_RISK_GATE_SECRET", "").strip()
     if env_secret == "__MISSING__":
@@ -197,5 +196,5 @@ def sign_approval_token(
         f"{symbol}|{asset_class}|{direction}|{quantity:.6f}|{target_weight:.8f}|{notional_eur:.2f}|"
         f"{max_slippage_bps:.2f}|{issuing_component}|{authorized_executor}|{strategy_version}|"
         f"{risk_policy_version}|{portfolio_version}|{issued_at_epoch:.3f}|{expires_at_epoch:.3f}|{nonce}"
-    ).encode("utf-8")
+    ).encode()
     return hmac.new(secret_key.encode("utf-8"), msg, hashlib.sha256).hexdigest()

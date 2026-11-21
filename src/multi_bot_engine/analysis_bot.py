@@ -10,7 +10,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.multi_bot_engine.shared_infrastructure import PAPER_TRADING_ONLY, PaperPortfolioLedger
+from src.multi_bot_engine.shared_infrastructure import (
+    PAPER_TRADING_ONLY,
+    PaperPortfolioLedger,
+)
 
 
 def evaluate_assets(snapshot: dict[str, Any], ledger: PaperPortfolioLedger) -> dict[str, dict[str, Any]]:

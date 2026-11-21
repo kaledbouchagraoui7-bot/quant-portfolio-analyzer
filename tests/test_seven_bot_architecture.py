@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import secrets
 import time
+
 import pytest
 
 from src.multi_bot_engine.execution_bot import execute_paper_orders
 from src.multi_bot_engine.monitoring_bot import monitor_portfolio_health
 from src.multi_bot_engine.orchestrator_bot import run_seven_bot_cycle
-from src.multi_bot_engine.risk_management_bot import ApprovedOrder, validate_and_approve_orders
+from src.multi_bot_engine.risk_management_bot import (
+    ApprovedOrder,
+    validate_and_approve_orders,
+)
 from src.multi_bot_engine.shared_infrastructure import (
     PaperPortfolioLedger,
     get_risk_gate_secret,
