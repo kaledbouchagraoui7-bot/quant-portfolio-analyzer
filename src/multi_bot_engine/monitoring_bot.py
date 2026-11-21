@@ -11,7 +11,10 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from src.multi_bot_engine.shared_infrastructure import PAPER_TRADING_ONLY, PaperPortfolioLedger
+from src.multi_bot_engine.shared_infrastructure import (
+    PAPER_TRADING_ONLY,
+    PaperPortfolioLedger,
+)
 from src.risk_execution_engine import check_drawdown_circuit_breaker
 
 MIN_SHARPE_OBSERVATIONS = 30

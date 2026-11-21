@@ -1,6 +1,7 @@
-import pytest
 import os
+
 from evolution_extensions import PortfolioEvolutionScanner
+
 
 def test_grade_security_logic():
     assert PortfolioEvolutionScanner.grade_security(0.9)["rating"] == "CRITICAL"

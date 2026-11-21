@@ -7,7 +7,6 @@ import math
 from src.trading_bots.mean_reversion_stat_bot import generate_mean_reversion_signals
 from src.trading_bots.regime_trend_bot import generate_regime_trend_signals
 from src.walk_forward_backtester import (
-    compute_audited_metrics,
     monte_carlo_drawdown_ci,
     run_walk_forward_backtest,
 )

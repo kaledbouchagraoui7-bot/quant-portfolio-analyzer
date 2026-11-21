@@ -12,8 +12,9 @@ import hashlib
 import io
 import json
 import math
+import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -108,7 +109,7 @@ def fetch_free_historical_daily_ohlcv(
                 dates.append(dt)
                 closes.append(cl)
                 volumes.append(max(0.0, vol))
-    except Exception:
+    except (urllib.error.URLError, TimeoutError, OSError, csv.Error, ValueError):
         dates, closes, volumes = [], [], []
 
     if len(dates) < 5:
@@ -223,7 +224,7 @@ def register_dataset(
         "survivorship_bias_free": bool(survivorship_bias_free),
         "source": source,
         "methodology": methodology,
-        "acquired_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "acquired_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "checksum_sha256": checksum,
         "bar_counts": bar_counts,
         "validation": validation,

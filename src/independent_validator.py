@@ -14,13 +14,15 @@ import json
 import math
 import random
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from src.risk_execution_engine import apply_slippage_and_commission
-from src.trading_bots.institutional_momentum_allocator import compute_dual_momentum_weights
+from src.trading_bots.institutional_momentum_allocator import (
+    compute_dual_momentum_weights,
+)
 from src.walk_forward_backtester import compute_audited_metrics
 
 _DEFAULT_TRIALS_PATH = Path(__file__).resolve().parent.parent / ".runtime" / "experiment_trials.json"
@@ -38,14 +40,14 @@ class ExperimentTrialRegistry:
                 data = json.loads(self.path.read_text(encoding="utf-8"))
                 if isinstance(data, dict) and isinstance(data.get("trials"), list):
                     return data
-            except Exception:
-                pass
+            except (OSError, json.JSONDecodeError, ValueError):
+                return {"trials": []}
         return {"trials": []}
 
     def record_trials(self, entries: list[dict[str, Any]]) -> int:
         data = self.load()
         existing_sigs = {e.get("signature") for e in data["trials"] if isinstance(e, dict)}
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         for ent in entries:
             sig = ent.get("signature")
             if sig and sig not in existing_sigs:

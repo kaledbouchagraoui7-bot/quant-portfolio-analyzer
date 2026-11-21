@@ -15,9 +15,14 @@ from src.risk_execution_engine import (
     check_drawdown_circuit_breaker,
     fractional_kelly_fraction,
 )
-from src.trading_bots.institutional_momentum_allocator import compute_dual_momentum_weights
+from src.trading_bots.institutional_momentum_allocator import (
+    compute_dual_momentum_weights,
+)
 from src.trading_bots.mean_reversion_stat_bot import generate_mean_reversion_signals
-from src.trading_bots.regime_trend_bot import detect_market_regime, generate_regime_trend_signals
+from src.trading_bots.regime_trend_bot import (
+    detect_market_regime,
+    generate_regime_trend_signals,
+)
 
 
 def test_paper_trading_and_leverage_constants() -> None:
