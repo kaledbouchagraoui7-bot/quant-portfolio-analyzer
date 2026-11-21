@@ -1,4 +1,3 @@
-import pytest
 import os
 from evolution_extensions import PortfolioEvolutionScanner
 

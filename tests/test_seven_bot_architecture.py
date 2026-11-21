@@ -11,19 +11,15 @@ from src.multi_bot_engine.monitoring_bot import monitor_portfolio_health
 from src.multi_bot_engine.orchestrator_bot import run_seven_bot_cycle
 from src.multi_bot_engine.risk_management_bot import ApprovedOrder, validate_and_approve_orders
 from src.multi_bot_engine.shared_infrastructure import (
-    AGE_18_MONETIZATION_GATE,
-    LIVE_BROKER_ENABLED,
-    MAX_LEVERAGE,
-    PAPER_TRADING_ONLY,
-    ZERO_REAL_MONEY_RISK,
     PaperPortfolioLedger,
-    build_synthetic_multi_asset_prices,
     get_risk_gate_secret,
     sign_approval_token,
 )
 
 
-def test_seven_bot_full_cycle_and_alcoa_audit_trail() -> None:
+def test_seven_bot_full_cycle_and_alcoa_audit_trail(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("QPA_NONCE_DB_PATH", str(tmp_path / "nonces.sqlite3"))
+    monkeypatch.setenv("QPA_RISK_GATE_SECRET", "TEST_PERSISTENT_32BYTE_KEY_ABCDEF123456")
     res = run_seven_bot_cycle(initial_capital_eur=10000.0)
     assert res["age_18_monetization_gate"] is True
     assert res["paper_trading_only"] is True
@@ -41,7 +37,9 @@ def test_seven_bot_full_cycle_and_alcoa_audit_trail() -> None:
     assert "BTC_SPOT" in res["positions"]
 
 
-def test_risk_management_cannot_be_bypassed_and_vetoes_leverage() -> None:
+def test_risk_management_cannot_be_bypassed_and_vetoes_leverage(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("QPA_NONCE_DB_PATH", str(tmp_path / "nonces.sqlite3"))
+    monkeypatch.setenv("QPA_RISK_GATE_SECRET", "TEST_PERSISTENT_32BYTE_KEY_ABCDEF123456")
     ledger = PaperPortfolioLedger(initial_capital_eur=10000.0, cash_eur=10000.0, peak_nav_eur=10000.0)
     prices = {"VWCE_ETF": 100.0, "BTC_SPOT": 100.0}
 
