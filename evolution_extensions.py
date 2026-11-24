@@ -6,12 +6,6 @@ class SecurityGrade(TypedDict):
     score: float
     rating: str
 
-class MockDataLayer:
-    """Decouples backtester from live APIs for deterministic testing."""
-    @staticmethod
-    def fetch_mock_market_data(ticker: str) -> Dict[str, float]:
-        return {"ticker": ticker, "price": 100.0, "volatility": 0.2}
-
 class PortfolioEvolutionScanner:
     @staticmethod
     def grade_security(risk_score: float) -> SecurityGrade:
